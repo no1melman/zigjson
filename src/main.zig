@@ -1,11 +1,11 @@
 const std = @import("std");
 const print = std.debug.print;
 const File = std.fs.File;
-const utf8reader = @import("utf8reader.zig");
+const utf8JsonReader = @import("utf8JsonReader.zig");
 
 pub fn main() !void {
     print("hello there", .{});
-    try utf8reader.hello();
+    try utf8JsonReader.hello();
 
     const file = try std.fs.cwd().openFile("compile_commands.json", .{});
     defer file.close();
@@ -21,7 +21,7 @@ pub fn main() !void {
         }
 
         const buffer_slice = buffer[0..read_bytes];
-        const result = try utf8reader.readNext(buffer_slice);
+        const result = try utf8JsonReader.readNext(buffer_slice);
 
         should_continue = switch (result) {
             .ok => false,

@@ -7,6 +7,13 @@ pub fn hello() !void {
 
 const JsonTokenType = enum { none, start_object, end_object, start_array, end_array, property, comment, string, number, true, false, null, undefined };
 
+const start_object = '{';
+const end_object = '}';
+const start_array = '[';
+const end_array = ']';
+const comment = '/';
+const quote = '"';
+
 const ReadResultTag = enum { ok, need_more };
 const ReadResult = union(ReadResultTag) { ok: u8, need_more: void };
 
