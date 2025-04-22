@@ -1,28 +1,35 @@
 const std = @import("std");
 const print = std.debug.print;
 const File = std.fs.File;
+const utf8reader = @import("utf8reader.zig");
 
 pub fn main() !void {
-
     print("hello there", .{});
+    try utf8reader.hello();
 
-
-    const file = try std.fs.cwd().openFile("build.ps1", .{});
+    const file = try std.fs.cwd().openFile("compile_commands.json", .{});
     defer file.close();
 
     var buffer: [30]u8 = [_]u8{0} ** 30;
     var read_bytes: usize = undefined;
-    while (read_bytes > 0) {
+    var should_continue: bool = true;
+    while (read_bytes > 0 and should_continue) {
         read_bytes = try file.read(&buffer);
 
         if (read_bytes == 0) {
             break;
         }
 
-        print("Buffer: {s} ({})\n", .{buffer[0..read_bytes], read_bytes});
+        const buffer_slice = buffer[0..read_bytes];
+        const result = try utf8reader.readNext(buffer_slice);
+
+        should_continue = switch (result) {
+            .ok => false,
+            .need_more => true
+        };
+
+        print("Buffer: {s} ({})\n", .{ buffer[0..read_bytes], read_bytes });
     }
 
     print("Done\n", .{});
 }
-
-
