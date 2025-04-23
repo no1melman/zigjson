@@ -1,9 +1,6 @@
 const std = @import("std");
 const print = std.debug.print;
-
-pub fn hello() !void {
-    print("Hello there", .{});
-}
+const mem = std.mem;
 
 const JsonTokenType = enum { none, start_object, end_object, start_array, end_array, property, comment, string, number, true, false, null, undefined };
 
@@ -17,7 +14,22 @@ const quote = '"';
 const ReadResultTag = enum { ok, need_more };
 const ReadResult = union(ReadResultTag) { ok: u8, need_more: void };
 
-pub fn readNext(buffer: []const u8) !ReadResult {
+const ReaderPosition = struct {
+    index: usize
+};
+const Utf8JsonReader = struct {
+    position: ReaderPosition,
+    buffer: []const u8
+};
+
+pub fn create_reader(buffer: []const u8) !Utf8JsonReader {
+    const position = ReaderPosition{.index = 0};
+    const reader = Utf8JsonReader{.position = position, .buffer = buffer };
+
+    return reader;
+}
+
+pub fn read_next(buffer: []const u8) !ReadResult {
     var index: usize = 0;
     while (index < buffer.len) {
         print("read next: {c}\n", .{buffer[index]});
@@ -28,3 +40,4 @@ pub fn readNext(buffer: []const u8) !ReadResult {
 
     return ReadResult{ .ok = 'y' };
 }
+
