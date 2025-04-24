@@ -9,6 +9,16 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFile("compile_commands.json", .{});
     defer file.close();
 
+    // Setup fallback allocator for the stack allocator
+    var fallback_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer fallback_arena.deinit();
+
+    const fallback_allocator = fallback_arena.allocator();
+
+    // Setup the stack fallback allocator for use in the utf8 reader
+    var stack_fallback = std.heap.stackFallback(64596, fallback_allocator);
+    const stack_allocator = stack_fallback.get();
+
     var buffer: [30]u8 = [_]u8{0} ** 30;
     var read_bytes: usize = undefined;
 
@@ -20,15 +30,12 @@ pub fn main() !void {
         }
 
         const buffer_slice = buffer[0..read_bytes];
-        var utf8_reader = try json.create_reader(&buffer_slice);
-        while (utf8_reader.read_next()) {
-            const readToken = utf8_reader.tokenType;
+        var utf8_reader = try json.create_reader(&buffer_slice, stack_allocator);
+        while (try utf8_reader.read_next()) {
+            const read_token = utf8_reader.token_type;
 
-            print("Read: {}\n", .{readToken});
-
-            break;
+            print("Read: {}\n", .{read_token});
         }
-        break;
     }
 
     print("Done\n", .{});
