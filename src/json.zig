@@ -19,23 +19,66 @@ const true_value = "true";
 const false_value = "false";
 
 const ReadResultTag = enum { ok, need_more };
-const ReadResult = union(ReadResultTag) { ok: u8, need_more: void };
+const ReadResult = union(ReadResultTag) { ok: void, need_more: void };
 
 const ReaderPosition = struct { index: usize = 0 };
 
-const JsonError = error{
-    ExpectedBoolean,
+const JsonError = error{ ExpectedBoolean, ExpectedProperty, ExpectedValue, ExpectedEndOfArray, ExpectedEndOfObject, UnexpectedSyntax };
+
+fn objectParser(reader: *Utf8JsonReader) JsonError!ReadResult {
+    reader.token_type = .start_object;
+    return .ok;
+}
+
+fn arrayParser(reader: *Utf8JsonReader) JsonError!ReadResult {
+    reader.token_type = .start_array;
+    return .ok;
+}
+
+fn propertyParser(reader: *Utf8JsonReader) JsonError!ReadResult {
+    reader.token_type = .property;
+    const result = try reader.readString();
+    return if (result) .ok else .need_more;
+}
+
+const ParserType = fn (*Utf8JsonReader) JsonError!ReadResult;
+// struct that holds the error
+const FailParserContext = struct {
+    err: JsonError,
+
+    pub fn parser(self: *FailParserContext, reader: *Utf8JsonReader) JsonError!ReadResult {
+        _ = reader; // ignore reader
+        return self.err;
+    }
 };
+fn failParser(errorToReturn: JsonError) ParserType {
+    const ctx = FailParserContext{ .err = errorToReturn };
+
+    return ctx.parser;
+}
+
+fn valueParser(reader: *Utf8JsonReader) JsonError!ReadResult {
+    const current_char = reader.advancePosition() orelse return .need_more;
+
+    const next_parser: fn (reader: *Utf8JsonReader) JsonError!ReadResult = switch (current_char) {
+        start_object => objectParser,
+        start_array => arrayParser,
+        else => failParser(.ExpectedValue),
+    };
+
+    return next_parser(reader);
+}
 
 const Utf8JsonReader = struct {
     position: ReaderPosition,
     buffer: *const []u8,
     token_type: JsonTokenType = .none,
+    previouse_token_type: JsonTokenType = .none,
     expected_next: []JsonTokenType,
     internal_buffer: ArrayList,
     pre_colon: bool = true,
 
-    fn advance_position(self: *Utf8JsonReader) ?u8 {
+    fn advancePosition(self: *Utf8JsonReader) ?u8 {
         if (self.position.index < self.buffer.len) {
             const next_char = self.buffer.*[self.position.index];
             self.position.index += 1;
@@ -43,8 +86,8 @@ const Utf8JsonReader = struct {
         }
         return null;
     }
-    pub fn read_next(self: *Utf8JsonReader) !bool {
-        const current_char = advance_position(self) orelse return false;
+    pub fn readNext(self: *Utf8JsonReader) !bool {
+        const current_char = advancePosition(self) orelse return false;
 
         print("read next: {c}\n", .{current_char});
 
@@ -62,7 +105,7 @@ const Utf8JsonReader = struct {
             end_array => .end_array,
             colon => {
                 self.pre_colon = false;
-                const next_char = advance_position(self) orelse return false;
+                const next_char = advancePosition(self) orelse return false;
                 // keep the switch going...
                 continue :tc next_char;
             },
@@ -76,29 +119,29 @@ const Utf8JsonReader = struct {
 
         if (self.token_type == .property or self.token_type == .string) {
             // collect all the string into the internal buffer...
-            return self.read_string();
+            return self.readString();
         }
         if (self.token_type == .boolean) {
-            return self.read_bool();
+            return self.readBool();
         }
 
         return true;
     }
 
-    fn read_string(self: *Utf8JsonReader) !bool {
+    fn readString(self: *Utf8JsonReader) !bool {
         self.internal_buffer.clearAndFree();
-        var string_char = advance_position(self) orelse return false;
+        var string_char = advancePosition(self) orelse return false;
         while (string_char != quote) {
             print("  collecting string char: {c}\n", .{string_char});
             try self.internal_buffer.append(string_char);
-            string_char = advance_position(self) orelse return false;
+            string_char = advancePosition(self) orelse return false;
         }
         print(" grabbed string: {s}\n", .{self.internal_buffer.items});
         self.pre_colon = !self.pre_colon;
         return true;
     }
 
-    fn read_bool(self: *Utf8JsonReader) !bool {
+    fn readBool(self: *Utf8JsonReader) !bool {
         // clear internal_buffer
         self.internal_buffer.clearAndFree();
 
@@ -112,7 +155,7 @@ const Utf8JsonReader = struct {
         var counter: usize = 1;
         var next_char: u8 = undefined;
         while (counter < len) {
-            next_char = self.advance_position() orelse return false;
+            next_char = self.advancePosition() orelse return false;
             try self.internal_buffer.append(next_char);
             counter += 1;
         }
@@ -121,16 +164,16 @@ const Utf8JsonReader = struct {
         return if (std.mem.eql(u8, result, true_value)) true else if (std.mem.eql(u8, result, false_value)) true else error.ExpectedBoolean;
     }
 
-    pub fn get_string(self: *Utf8JsonReader) []u8 {
+    pub fn getString(self: *Utf8JsonReader) []u8 {
         return self.internal_buffer.items;
     }
-    pub fn get_bool(self: *Utf8JsonReader) bool {
+    pub fn getBool(self: *Utf8JsonReader) bool {
         const result = self.internal_buffer.items;
         return if (std.mem.eql(u8, result, true_value)) true else if (std.mem.eql(u8, result, false_value)) false else false;
     }
 };
 
-pub fn create_reader(buffer: *const []u8, allocator: mem.Allocator) !Utf8JsonReader {
+pub fn CreateReader(buffer: *const []u8, allocator: mem.Allocator) !Utf8JsonReader {
     const position = ReaderPosition{ .index = 0 };
     const reader = Utf8JsonReader{ .position = position, .buffer = buffer, .expected_next = undefined, .internal_buffer = ArrayList.init(allocator) };
 

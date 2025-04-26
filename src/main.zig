@@ -30,8 +30,8 @@ pub fn main() !void {
         }
 
         const buffer_slice = buffer[0..read_bytes];
-        var utf8_reader = try json.create_reader(&buffer_slice, stack_allocator);
-        while (try utf8_reader.read_next()) {
+        var utf8_reader = try json.CreateReader(&buffer_slice, stack_allocator);
+        while (try utf8_reader.readNext()) {
             const read_token = utf8_reader.token_type;
 
             print("Read: {}\n", .{read_token});
